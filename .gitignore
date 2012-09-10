@@ -1,0 +1,7 @@
+.lock*
+.sconsign.dblite
+.waf*
+waf
+build
+optdict.c
+*.so

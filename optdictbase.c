@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include "optdictbase.h"
 
 /* See large comment block below.  This must be >= 1. */
@@ -208,12 +209,13 @@ int
 init_dummy() 
 {
     char *init = "<dummy key>";
-    char *alias = dummy;
+    char *alias = NULL;
     if (dummy == NULL) {
         dummy = malloc(12 * sizeof(char));
         if (dummy == NULL)
             return 0;
     }
+    alias = dummy;
     while(*init) {
         *alias = *init;
         ++alias;
@@ -223,8 +225,30 @@ init_dummy()
     return 1;
 }
 
+    static int
+eqint(void *a, void *b)
+{
+    return *(int*)a == *(int*)b;
+}
+
+    static int
+eqfloat(void *a, void *b)
+{
+    return *(float*)a == *(float*)b;
+}
+
+    static int
+eqdouble(void *a, void *b)
+{
+    return *(double*)a == *(double*)b;
+}
+
+/* forward declaration */
+    static OptDictEntry *
+lookdict(OptDict *mp, void *key, register long hash);
+
     OptDict *
-OptDict_New(void)
+OptDict_New(enum key_t key_type)
 {
     register OptDict *mp;
     if (dummy == NULL) { /* Auto-initialize dummy */
@@ -235,7 +259,18 @@ OptDict_New(void)
     if (mp == NULL)
         return NULL;
     EMPTY_TO_MINSIZE(mp);
-    mp->ma_lookup = NULL;
+    mp->ma_lookup = lookdict;
+    switch(key_type) {
+        case INT_KEY:
+            mp->eqfunc = eqint;
+            break;
+        case FLOAT_KEY:
+            mp->eqfunc = eqfloat;
+            break;
+        case DOUBLE_KEY:
+            mp->eqfunc = eqdouble;
+            break;
+    }
     return mp;
 }
 
@@ -263,145 +298,47 @@ OptDict_New(void)
    the caller can (if it wishes) add the <key, value> pair to the returned
    PyDictEntry*.
    */
-    /* static PyDictEntry * */
-/* lookdict(OptDict *mp, PyObject *key, register long hash) */
-/* { */
-    /* register size_t i; */
-    /* register size_t perturb; */
-    /* register PyDictEntry *freeslot; */
-    /* register size_t mask = (size_t)mp->ma_mask; */
-    /* PyDictEntry *ep0 = mp->ma_table; */
-    /* register PyDictEntry *ep; */
-    /* register int cmp; */
-    /* PyObject *startkey; */
 
-    /* i = (size_t)hash & mask; */
-    /* ep = &ep0[i]; */
-    /* if (ep->me_key == NULL || ep->me_key == key) */
-        /* return ep; */
+    static OptDictEntry *
+lookdict(OptDict *mp, void *key, register long hash)
+{
+    register size_t i;
+    register size_t perturb;
+    register OptDictEntry *freeslot;
+    register size_t mask = (size_t)mp->ma_mask;
+    OptDictEntry *ep0 = mp->ma_table;
+    register OptDictEntry *ep;
 
-    /* if (ep->me_key == dummy) */
-        /* freeslot = ep; */
-    /* else { */
-        /* if (ep->me_hash == hash) { */
-            /* startkey = ep->me_key; */
-            /* Py_INCREF(startkey); */
-            /* cmp = PyObject_RichCompareBool(startkey, key, Py_EQ); */
-            /* Py_DECREF(startkey); */
-            /* if (cmp < 0) */
-                /* return NULL; */
-            /* if (ep0 == mp->ma_table && ep->me_key == startkey) { */
-                /* if (cmp > 0) */
-                    /* return ep; */
-            /* } */
-            /* else { */
-                /* The compare did major nasty stuff to the
-                 * dict:  start over.
-                 * XXX A clever adversary could prevent this
-                 * XXX from terminating.
-                 */
-                /* return lookdict(mp, key, hash); */
-            /* } */
-        /* } */
-        /* freeslot = NULL; */
-    /* } */
+    i = hash & mask;
+    ep = &ep0[i];
+    if (ep->me_key == NULL || ep->me_key == key)
+        return ep;
+    if (ep->me_key == dummy)
+        freeslot = ep;
+    else {
+        if (ep->me_hash == hash && mp->eqfunc(ep->me_key, key))
+            return ep;
+        freeslot = NULL;
+    }
 
     /* In the loop, me_key == dummy is by far (factor of 100s) the
        least likely outcome, so test for that last. */
-    /* for (perturb = hash; ; perturb >>= PERTURB_SHIFT) { */
-        /* i = (i << 2) + i + perturb + 1; */
-        /* ep = &ep0[i & mask]; */
-        /* if (ep->me_key == NULL) */
-            /* return freeslot == NULL ? ep : freeslot; */
-        /* if (ep->me_key == key) */
-            /* return ep; */
-        /* if (ep->me_hash == hash && ep->me_key != dummy) { */
-            /* startkey = ep->me_key; */
-            /* Py_INCREF(startkey); */
-            /* cmp = PyObject_RichCompareBool(startkey, key, Py_EQ); */
-            /* Py_DECREF(startkey); */
-            /* if (cmp < 0) */
-                /* return NULL; */
-            /* if (ep0 == mp->ma_table && ep->me_key == startkey) { */
-                /* if (cmp > 0) */
-                    /* return ep; */
-            /* } */
-            /* else { */
-                /* The compare did major nasty stuff to the
-                 * dict:  start over.
-                 * XXX A clever adversary could prevent this
-                 * XXX from terminating.
-                 */
-                /* return lookdict(mp, key, hash); */
-            /* } */
-        /* } */
-        /* else if (ep->me_key == dummy && freeslot == NULL) */
-            /* freeslot = ep; */
-    /* } */
-    /* assert(0);          [> NOT REACHED <] */
-    /* return 0; */
-/* } */
-
-/*
- * Hacked up version of lookdict which can assume keys are always strings;
- * this assumption allows testing for errors during PyObject_RichCompareBool()
- * to be dropped; string-string comparisons never raise exceptions.  This also
- * means we don't need to go through PyObject_RichCompareBool(); we can always
- * use _PyString_Eq() directly.
- *
- * This is valuable because dicts with only string keys are very common.
- */
-    /* static PyDictEntry * */
-/* lookdict_string(OptDict *mp, PyObject *key, register long hash) */
-/* { */
-    /* register size_t i; */
-    /* register size_t perturb; */
-    /* register PyDictEntry *freeslot; */
-    /* register size_t mask = (size_t)mp->ma_mask; */
-    /* PyDictEntry *ep0 = mp->ma_table; */
-    /* register PyDictEntry *ep; */
-
-    /* Make sure this function doesn't have to handle non-string keys,
-       including subclasses of str; e.g., one reason to subclass
-       strings is to override __eq__, and for speed we don't cater to
-       that here. */
-    /* if (!PyString_CheckExact(key)) { */
-/* #ifdef SHOW_CONVERSION_COUNTS */
-        /* ++converted; */
-/* #endif */
-        /* mp->ma_lookup = lookdict; */
-        /* return lookdict(mp, key, hash); */
-    /* } */
-    /* i = hash & mask; */
-    /* ep = &ep0[i]; */
-    /* if (ep->me_key == NULL || ep->me_key == key) */
-        /* return ep; */
-    /* if (ep->me_key == dummy) */
-        /* freeslot = ep; */
-    /* else { */
-        /* if (ep->me_hash == hash && _PyString_Eq(ep->me_key, key)) */
-            /* return ep; */
-        /* freeslot = NULL; */
-    /* } */
-
-    /* In the loop, me_key == dummy is by far (factor of 100s) the
-       least likely outcome, so test for that last. */
-    /* for (perturb = hash; ; perturb >>= PERTURB_SHIFT) { */
-        /* i = (i << 2) + i + perturb + 1; */
-        /* ep = &ep0[i & mask]; */
-        /* if (ep->me_key == NULL) */
-            /* return freeslot == NULL ? ep : freeslot; */
-        /* if (ep->me_key == key */
-                /* || (ep->me_hash == hash */
-                    /* && ep->me_key != dummy */
-                    /* && _PyString_Eq(ep->me_key, key))) */
-            /* return ep; */
-        /* if (ep->me_key == dummy && freeslot == NULL) */
-            /* freeslot = ep; */
-    /* } */
-    /* assert(0);          [> NOT REACHED <] */
-    /* return 0; */
-/* } */
+    for (perturb = hash; ; perturb >>= PERTURB_SHIFT) {
+        i = (i << 2) + i + perturb + 1;
+        ep = &ep0[i & mask];
+        if (ep->me_key == NULL)
+            return freeslot == NULL ? ep : freeslot;
+        if (ep->me_key == key
+                || (ep->me_hash == hash
+                    && ep->me_key != dummy
+                    && mp->eqfunc(ep->me_key, key)))
+            return ep;
+        if (ep->me_key == dummy && freeslot == NULL)
+            freeslot = ep;
+    }
+    assert(0);          /* NOT REACHED */
+    return 0;
+}
 
 /* #ifdef SHOW_TRACK_COUNT */
 /* #define INCREASE_TRACK_COUNT \ */

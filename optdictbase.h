@@ -41,7 +41,14 @@ struct _optdict{
      */
     OptDictEntry *ma_table;
     OptDictEntry *(*ma_lookup)(OptDict *mp, void *key, long hash);
+    int (*eqfunc)(void *, void *);
     OptDictEntry ma_smalltable[optdict_MINSIZE];
+};
+
+enum key_t {
+    INT_KEY,
+    FLOAT_KEY,
+    DOUBLE_KEY
 };
 
 /* [> PyAPI_DATA(PyTypeObject) PyDict_Type; <] */
@@ -62,7 +69,7 @@ struct _optdict{
 /* [> # define PyDictViewSet_Check(op) \ <] */
     /* [> (PyDictKeys_Check(op) || PyDictItems_Check(op)) <] */
 
-OptDict *OptDict_New(void);
+OptDict *OptDict_New(enum key_t);
 /* PyObject *OptDict_GetItem(OptDictObject *mp, void *key); */
 /* int OptDict_SetItem(OptDictObject *mp, void *key, void *item); */
 /* int OptDict_DelItem(OptDictObject *mp, void *key); */

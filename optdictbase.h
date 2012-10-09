@@ -5,6 +5,7 @@ extern "C" {
 #endif
 
 #define optdict_MINSIZE 8
+#define ERR_NO_MEM -1
 
 typedef struct {
     /* Cached hash code of me_key.  Note that hash codes are C longs.
@@ -50,6 +51,8 @@ enum key_t {
     FLOAT_KEY,
     DOUBLE_KEY
 };
+
+long int_hash(int);
 
 /* [> PyAPI_DATA(PyTypeObject) PyDict_Type; <] */
 /* [> PyAPI_DATA(PyTypeObject) PyDictIterKey_Type; <] */

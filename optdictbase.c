@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 #include "optdictbase.h"
 
 /* See large comment block below.  This must be >= 1. */
@@ -274,6 +275,15 @@ OptDict_New(enum key_t key_type)
     return mp;
 }
 
+long
+int_hash(int x)
+{
+    long y = (long) x;
+    if (-1 == y)
+        y = -2;
+    return y;
+}
+
 /*
    The basic lookup function used by all operations.
    This is based on Algorithm D from Knuth Vol. 3, Sec. 6.4.
@@ -393,162 +403,154 @@ lookdict(OptDict *mp, void *key, register long hash)
    Eats a reference to key and one to value.
    Returns -1 if an error occurred, or 0 on success.
    */
-    /* static int */
-/* insertdict(register OptDict *mp, PyObject *key, long hash, PyObject *value) */
-/* { */
-    /* PyObject *old_value; */
-    /* register PyDictEntry *ep; */
-    /* typedef PyDictEntry *(*lookupfunc)(OptDict *, PyObject *, long); */
+    static int
+insertdict(register OptDict *mp, void *key, long hash, void *value, void *oldvalue)
+{
+    register OptDictEntry *ep;
+    typedef OptDictEntry *(*lookupfunc)(OptDict *, void *, long);
 
-    /* assert(mp->ma_lookup != NULL); */
-    /* ep = mp->ma_lookup(mp, key, hash); */
-    /* if (ep == NULL) { */
-        /* Py_DECREF(key); */
-        /* Py_DECREF(value); */
-        /* return -1; */
-    /* } */
+    oldvalue = NULL;
+
+    assert(mp->ma_lookup != NULL);
+    ep = mp->ma_lookup(mp, key, hash);
+    if (ep == NULL) {
+        return -1;
+    }
+    /* For Python garbage collection tracking */
     /* MAINTAIN_TRACKING(mp, key, value); */
-    /* if (ep->me_value != NULL) { */
-        /* old_value = ep->me_value; */
-        /* ep->me_value = value; */
-        /* Py_DECREF(old_value); [> which **CAN** re-enter <] */
-        /* Py_DECREF(key); */
-    /* } */
-    /* else { */
-        /* if (ep->me_key == NULL) */
-            /* mp->ma_fill++; */
-        /* else { */
-            /* assert(ep->me_key == dummy); */
-            /* Py_DECREF(dummy); */
-        /* } */
-        /* ep->me_key = key; */
-        /* ep->me_hash = (Py_ssize_t)hash; */
-        /* ep->me_value = value; */
-        /* mp->ma_used++; */
-    /* } */
-    /* return 0; */
-/* } */
+    if (ep->me_value != NULL) {
+        oldvalue = ep->me_value;
+        ep->me_value = value;
+    }
+    else {
+        if (ep->me_key == NULL)
+            mp->ma_fill++;
+        else {
+            assert(ep->me_key == dummy);
+        }
+        ep->me_key = key;
+        ep->me_hash = hash;
+        ep->me_value = value;
+        mp->ma_used++;
+    }
+    return 0;
+}
 
-/*
-   Internal routine used by dictresize() to insert an item which is
-   known to be absent from the dict.  This routine also assumes that
-   the dict contains no deleted entries.  Besides the performance benefit,
-   using insertdict() in dictresize() is dangerous (SF bug #1456209).
-   Note that no refcounts are changed by this routine; if needed, the caller
-   is responsible for incref'ing `key` and `value`.
-   */
-    /* static void */
-/* insertdict_clean(register OptDict *mp, PyObject *key, long hash, */
-        /* PyObject *value) */
-/* { */
-    /* register size_t i; */
-    /* register size_t perturb; */
-    /* register size_t mask = (size_t)mp->ma_mask; */
-    /* PyDictEntry *ep0 = mp->ma_table; */
-    /* register PyDictEntry *ep; */
+/* Internal routine used by dictresize() to insert an item which is known to be
+ * absent from the dict.  This routine also assumes that the dict contains no
+ * deleted entries.  Besides the performance benefit, using insertdict() in
+ * dictresize() is dangerous (SF bug #1456209).  Note that no refcounts are
+ * changed by this routine; if needed, the caller is responsible for incref'ing
+ * `key` and `value`. 
+ */
+    static void
+insertdict_clean(register OptDict *mp, void *key, long hash,
+        void *value)
+{
+    register size_t i;
+    register size_t perturb;
+    register size_t mask = (size_t)mp->ma_mask;
+    OptDictEntry *ep0 = mp->ma_table;
+    register OptDictEntry *ep;
 
     /* MAINTAIN_TRACKING(mp, key, value); */
-    /* i = hash & mask; */
-    /* ep = &ep0[i]; */
-    /* for (perturb = hash; ep->me_key != NULL; perturb >>= PERTURB_SHIFT) { */
-        /* i = (i << 2) + i + perturb + 1; */
-        /* ep = &ep0[i & mask]; */
-    /* } */
-    /* assert(ep->me_value == NULL); */
-    /* mp->ma_fill++; */
-    /* ep->me_key = key; */
-    /* ep->me_hash = (Py_ssize_t)hash; */
-    /* ep->me_value = value; */
-    /* mp->ma_used++; */
-/* } */
+    i = hash & mask;
+    ep = &ep0[i];
+    for (perturb = hash; ep->me_key != NULL; perturb >>= PERTURB_SHIFT) {
+        i = (i << 2) + i + perturb + 1;
+        ep = &ep0[i & mask];
+    }
+    assert(ep->me_value == NULL);
+    mp->ma_fill++;
+    ep->me_key = key;
+    ep->me_hash = hash;
+    ep->me_value = value;
+    mp->ma_used++;
+}
 
-/*
-   Restructure the table by allocating a new table and reinserting all
-   items again.  When entries have been deleted, the new table may
-   actually be smaller than the old one.
-   */
-    /* static int */
-/* dictresize(OptDict *mp, Py_ssize_t minused) */
-/* { */
-    /* Py_ssize_t newsize; */
-    /* PyDictEntry *oldtable, *newtable, *ep; */
-    /* Py_ssize_t i; */
-    /* int is_oldtable_malloced; */
-    /* PyDictEntry small_copy[optdict_MINSIZE]; */
+/* Restructure the table by allocating a new table and reinserting all items
+ * again.  When entries have been deleted, the new table may actually be
+ * smaller than the old one.  
+ */
+    static int
+dictresize(OptDict *mp, size_t minused)
+{
+    size_t newsize;
+    OptDictEntry *oldtable, *newtable, *ep;
+    size_t i;
+    int is_oldtable_malloced;
+    OptDictEntry small_copy[optdict_MINSIZE];
 
-    /* assert(minused >= 0); */
+    assert(minused >= 0);
 
-    /* [> Find the smallest table size > minused. <] */
-    /* for (newsize = optdict_MINSIZE; */
-            /* newsize <= minused && newsize > 0; */
-            /* newsize <<= 1) */
-        /* ; */
-    /* if (newsize <= 0) { */
-        /* PyErr_NoMemory(); */
-        /* return -1; */
-    /* } */
+    /* Find the smallest table size > minused. */
+    for (newsize = optdict_MINSIZE;
+            newsize <= minused && newsize > 0;
+            newsize <<= 1)
+        ;
+    if (newsize <= 0) {
+        return ERR_NO_MEM;
+    }
 
-    /* [> Get space for a new table. <] */
-    /* oldtable = mp->ma_table; */
-    /* assert(oldtable != NULL); */
-    /* is_oldtable_malloced = oldtable != mp->ma_smalltable; */
+    /* Get space for a new table. */
+    oldtable = mp->ma_table;
+    assert(oldtable != NULL);
+    is_oldtable_malloced = oldtable != mp->ma_smalltable;
 
-    /* if (newsize == optdict_MINSIZE) { */
-        /* [> A large table is shrinking, or we can't get any smaller. <] */
-        /* newtable = mp->ma_smalltable; */
-        /* if (newtable == oldtable) { */
-            /* if (mp->ma_fill == mp->ma_used) { */
-                /* [> No dummies, so no point doing anything. <] */
-                /* return 0; */
-            /* } */
-            /* We're not going to resize it, but rebuild the
-               table anyway to purge old dummy entries.
-Subtle:  This is *necessary* if fill==size,
-as lookdict needs at least one virgin slot to
-terminate failing searches.  If fill < size, it's
-merely desirable, as dummies slow searches. */
-            /* assert(mp->ma_fill > mp->ma_used); */
-            /* memcpy(small_copy, oldtable, sizeof(small_copy)); */
-            /* oldtable = small_copy; */
-        /* } */
-    /* } */
-    /* else { */
-        /* newtable = PyMem_NEW(PyDictEntry, newsize); */
-        /* if (newtable == NULL) { */
-            /* PyErr_NoMemory(); */
-            /* return -1; */
-        /* } */
-    /* } */
+    if (newsize == optdict_MINSIZE) {
+        /* A large table is shrinking, or we can't get any smaller. */
+        newtable = mp->ma_smalltable;
+        if (newtable == oldtable) {
+            if (mp->ma_fill == mp->ma_used) {
+                /* No dummies, so no point doing anything. */
+                return 0;
+            }
+            /* We're not going to resize it, but rebuild the table anyway to
+             * purge old dummy entries.  
+             * Subtle:  This is *necessary* if fill==size, as lookdict needs at
+             * least one virgin slot to terminate failing searches.  If fill <
+             * size, it's merely desirable, as dummies slow searches.
+             */
+            assert(mp->ma_fill > mp->ma_used);
+            memcpy(small_copy, oldtable, sizeof(small_copy));
+            oldtable = small_copy;
+        }
+    }
+    else {
+        newtable = malloc(newsize * sizeof(OptDictEntry));
+        if (newtable == NULL) {
+            return ERR_NO_MEM;
+        }
+    }
 
-    /* [> Make the dict empty, using the new table. <] */
-    /* assert(newtable != oldtable); */
-    /* mp->ma_table = newtable; */
-    /* mp->ma_mask = newsize - 1; */
-    /* memset(newtable, 0, sizeof(PyDictEntry) * newsize); */
-    /* mp->ma_used = 0; */
-    /* i = mp->ma_fill; */
-    /* mp->ma_fill = 0; */
+    /* Make the dict empty, using the new table. */
+    assert(newtable != oldtable);
+    mp->ma_table = newtable;
+    mp->ma_mask = newsize - 1;
+    memset(newtable, 0, sizeof(OptDictEntry) * newsize);
+    mp->ma_used = 0;
+    i = mp->ma_fill;
+    mp->ma_fill = 0;
 
     /* Copy the data over; this is refcount-neutral for active entries;
        dummy entries aren't copied over, of course */
-    /* for (ep = oldtable; i > 0; ep++) { */
-        /* if (ep->me_value != NULL) {             [> active entry <] */
-            /* --i; */
-            /* insertdict_clean(mp, ep->me_key, (long)ep->me_hash, */
-                    /* ep->me_value); */
-        /* } */
-        /* else if (ep->me_key != NULL) {          [> dummy entry <] */
-            /* --i; */
-            /* assert(ep->me_key == dummy); */
-            /* Py_DECREF(ep->me_key); */
-        /* } */
-        /* [> else key == value == NULL:  nothing to do <] */
-    /* } */
+    for (ep = oldtable; i > 0; ep++) {
+        if (ep->me_value != NULL) {             /* active entry */
+            --i;
+            insertdict_clean(mp, ep->me_key, ep->me_hash,
+                    ep->me_value);
+        }
+        else if (ep->me_key != NULL) {          /* dummy entry */
+            --i;
+            assert(ep->me_key == dummy);
+        }
+        /* else key == value == NULL:  nothing to do */
+    }
 
-    /* if (is_oldtable_malloced) */
-        /* PyMem_DEL(oldtable); */
-    /* return 0; */
-/* } */
+    if (is_oldtable_malloced)
+        free(oldtable);
+    return 0;
+}
 
 /* Create a new dictionary pre-sized to hold an estimated number of elements.
    Underestimates are okay because the dictionary will resize as necessary.
@@ -622,47 +624,39 @@ merely desirable, as dummies slow searches. */
     /* return ep->me_value; */
 /* } */
 
-/* CAUTION: PyDict_SetItem() must guarantee that it won't resize the
- * dictionary if it's merely replacing the value for an existing key.
- * This means that it's safe to loop over a dictionary with PyDict_Next()
- * and occasionally replace a value -- but you can't insert new keys or
- * remove them.
+/* CAUTION: OptDict_SetItem() must guarantee that it won't resize the
+ * dictionary if it's merely replacing the value for an existing key.  This
+ * means that it's safe to loop over a dictionary with OptDict_Next() and
+ * occasionally replace a value -- but you can't insert new keys or remove
+ * them.
  */
-    /* int */
-/* PyDict_SetItem(register PyObject *op, PyObject *key, PyObject *value) */
-/* { */
-    /* register OptDict *mp; */
-    /* register long hash; */
-    /* register Py_ssize_t n_used; */
+    int
+OptDict_SetItem(register OptDict *mp, void *key, register long hash, void *value, void *oldvalue)
+{
+    register size_t n_used;
 
-    /* if (!PyDict_Check(op)) { */
-        /* PyErr_BadInternalCall(); */
-        /* return -1; */
-    /* } */
-    /* assert(key); */
-    /* assert(value); */
-    /* mp = (OptDict *)op; */
+    assert(key);
+    assert(value);
+    /* get the key's hash */
     /* if (PyString_CheckExact(key)) { */
         /* hash = ((PyStringObject *)key)->ob_shash; */
         /* if (hash == -1) */
             /* hash = PyObject_Hash(key); */
     /* } */
     /* else { */
-        /* hash = PyObject_Hash(key); */
-        /* if (hash == -1) */
-            /* return -1; */
+    if (hash == -1)
+        return -1;
     /* } */
-    /* assert(mp->ma_fill <= mp->ma_mask);  [> at least one empty slot <] */
-    /* n_used = mp->ma_used; */
-    /* Py_INCREF(value); */
-    /* Py_INCREF(key); */
-    /* if (insertdict(mp, key, hash, value) != 0) */
-        /* return -1; */
+    assert(mp->ma_fill <= mp->ma_mask);  /* at least one empty slot */
+    n_used = mp->ma_used;
+    /* XXX: Finish me!!! */
+    if (insertdict(mp, key, hash, value, oldvalue) != 0)
+        return -1;
     /* If we added a key, we can safely resize.  Otherwise just return!
      * If fill >= 2/3 size, adjust size.  Normally, this doubles or
      * quaduples the size, but it's also possible for the dict to shrink
      * (if ma_fill is much larger than ma_used, meaning a lot of dict
-     * keys have been * deleted).
+     * keys have been deleted).
      *
      * Quadrupling the size improves average dictionary sparseness
      * (reducing collisions) at the cost of some memory and iteration
@@ -672,10 +666,10 @@ merely desirable, as dummies slow searches. */
      * Very large dictionaries (over 50K items) use doubling instead.
      * This may help applications with severe memory constraints.
      */
-    /* if (!(mp->ma_used > n_used && mp->ma_fill*3 >= (mp->ma_mask+1)*2)) */
-        /* return 0; */
-    /* return dictresize(mp, (mp->ma_used > 50000 ? 2 : 4) * mp->ma_used); */
-/* } */
+    if (!(mp->ma_used > n_used && mp->ma_fill*3 >= (mp->ma_mask+1)*2))
+        return 0;
+    return dictresize(mp, (mp->ma_used > 50000 ? 2 : 4) * mp->ma_used);
+}
 
     /* int */
 /* PyDict_DelItem(PyObject *op, PyObject *key) */

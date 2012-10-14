@@ -1,5 +1,5 @@
 all:
-	python setup.py build_ext --inplace
+	./waf configure build
 
 clean:
-	-rm -rf build optdict.c optdict.so
+	./waf distclean

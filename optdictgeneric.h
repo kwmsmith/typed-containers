@@ -35,6 +35,9 @@ enum type_enum {
 
 typedef char OptDictEntry;
 
+#define FLAG_USED 1
+#define FLAG_DUMMY 2
+
 typedef struct _optdict OptDict;
 struct _optdict {
     size_t ma_fill;  /* # Active + # Dummy */

@@ -226,8 +226,7 @@ OptDict_New(enum type_enum key_type, enum type_enum val_type)
     mp->ma_mask = optdict_MINSIZE -1;
     memset(mp->ma_table, 0, table_size);
     mp->ma_used = mp->ma_fill = 0;
-    /* FIXME: implement lookdict!!! */
-    mp->ma_lookup = NULL;
+    mp->ma_lookup = lookdict;
     switch(key_type) {
         case INT:
             mp->eqfunc = eqint;
@@ -264,43 +263,49 @@ int_hash(int x)
     return y;
 }
 
-    /* static OptDictEntry * */
-/* lookdict(OptDict *mp, void *key, register long hash) */
-/* { */
-    /* register size_t i; */
-    /* register size_t perturb; */
-    /* register OptDictEntry *freeslot; */
-    /* register size_t mask = (size_t)mp->ma_mask; */
-    /* OptDictEntry *ep0 = mp->ma_table; */
-    /* register OptDictEntry *ep; */
+    static OptDictEntry *
+lookdict(OptDict *mp, void *key, register long hash)
+{
+    register size_t i;
+    register size_t perturb;
+    register OptDictEntry *freeslot;
+    register size_t mask = (size_t)mp->ma_mask;
+    OptDictEntry *ep0 = mp->ma_table;
+    register OptDictEntry *ep;
+    register long me_hash;
+    register long me_flags;
 
-    /* i = hash & mask; */
-    /* ep = &ep0[i]; */
-    /* if (ep->me_key == NULL || ep->me_key == key) */
-        /* return ep; */
-    /* if (ep->me_key == dummy) */
-        /* freeslot = ep; */
-    /* else { */
-        /* if (ep->me_hash == hash && mp->eqfunc(ep->me_key, key)) */
-            /* return ep; */
-        /* freeslot = NULL; */
-    /* } */
+    i = hash & mask;
+    ep = &ep0[i * mp->entry_size];
+    me_flags = *((long*)&ep[mp->flags_ofs]);
+    if (!(me_flags & FLAG_USED))
+        return ep;
+    me_hash = *((long*)ep);
+    if (me_flags & FLAG_DUMMY)
+        freeslot = ep;
+    else {
+        if (me_hash == hash && mp->eqfunc(&ep[mp->key_ofs], key))
+            return ep;
+        freeslot = NULL;
+    }
 
     /* In the loop, me_key == dummy is by far (factor of 100s) the
-       least likely outcome, so test for that last. */
-    /* for (perturb = hash; ; perturb >>= PERTURB_SHIFT) { */
-        /* i = (i << 2) + i + perturb + 1; */
-        /* ep = &ep0[i & mask]; */
-        /* if (ep->me_key == NULL) */
-            /* return freeslot == NULL ? ep : freeslot; */
-        /* if (ep->me_key == key */
-                /* || (ep->me_hash == hash */
-                    /* && ep->me_key != dummy */
-                    /* && mp->eqfunc(ep->me_key, key))) */
-            /* return ep; */
-        /* if (ep->me_key == dummy && freeslot == NULL) */
-            /* freeslot = ep; */
-    /* } */
-    /* assert(0);          [> NOT REACHED <] */
-    /* return 0; */
-/* } */
+     * least likely outcome, so test for that last.
+     */
+    for (perturb = hash; ; perturb >>= PERTURB_SHIFT) {
+        i = (i << 2) + i + perturb + 1;
+        ep = &ep0[(i & mask) * mp->entry_size];
+        me_flags = *((long*)&ep[mp->flags_ofs]);
+        if (!(me_flags & FLAG_USED))
+            return freeslot == NULL ? ep : freeslot;
+        me_hash = *((long*)ep);
+        if (me_hash == hash
+                && !(me_flags & FLAG_DUMMY)
+                && mp->eqfunc(&ep[mp->key_ofs], key))
+            return ep;
+        if ((me_flags & FLAG_DUMMY) && freeslot == NULL)
+            freeslot = ep;
+    }
+    assert(0);          /* NOT REACHED */
+    return 0;
+}

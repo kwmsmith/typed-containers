@@ -19,7 +19,7 @@ def build(ctx):
         # includes = 'optdictbase')
 
     ctx(features = 'c cshlib pyext',
-        source = 'optdictbase.c optdict.pyx',
+        source = 'optdictgeneric.c optdict.pyx',
         target = 'optdict',
         includes = '. ..',
         )

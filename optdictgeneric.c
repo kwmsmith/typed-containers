@@ -276,15 +276,15 @@ lookdict(OptDict *mp, void *key, register long hash)
     register long me_flags;
 
     i = hash & mask;
-    ep = &ep0[i * mp->entry_size];
-    me_flags = *((long*)&ep[mp->flags_ofs]);
+    ep = GET_ENTRY(mp, ep0, i);
+    me_flags = GET_FLAGS(mp, ep);
     if (!(me_flags & FLAG_USED))
         return ep;
-    me_hash = *((long*)ep);
+    me_hash = GET_HASH(mp, ep);
     if (me_flags & FLAG_DUMMY)
         freeslot = ep;
     else {
-        if (me_hash == hash && mp->eqfunc(&ep[mp->key_ofs], key))
+        if (me_hash == hash && mp->eqfunc(GET_KEYP(mp, ep), key))
             return ep;
         freeslot = NULL;
     }
@@ -294,14 +294,14 @@ lookdict(OptDict *mp, void *key, register long hash)
      */
     for (perturb = hash; ; perturb >>= PERTURB_SHIFT) {
         i = (i << 2) + i + perturb + 1;
-        ep = &ep0[(i & mask) * mp->entry_size];
-        me_flags = *((long*)&ep[mp->flags_ofs]);
+        ep = GET_ENTRY(mp, ep0, (i & mask));
+        me_flags = GET_FLAGS(mp, ep);
         if (!(me_flags & FLAG_USED))
             return freeslot == NULL ? ep : freeslot;
-        me_hash = *((long*)ep);
+        me_hash = GET_HASH(mp, ep);
         if (me_hash == hash
                 && !(me_flags & FLAG_DUMMY)
-                && mp->eqfunc(&ep[mp->key_ofs], key))
+                && mp->eqfunc(GET_KEYP(mp, ep), key))
             return ep;
         if ((me_flags & FLAG_DUMMY) && freeslot == NULL)
             freeslot = ep;
@@ -309,3 +309,204 @@ lookdict(OptDict *mp, void *key, register long hash)
     assert(0);          /* NOT REACHED */
     return 0;
 }
+
+/*
+   Internal routine to insert a new item into the table.
+   Used both by the internal resize routine and by the public insert routine.
+   Eats a reference to key and one to value.
+   Returns -1 if an error occurred, or 0 on success.
+   */
+    /* static int */
+/* insertdict(register OptDict *mp, void *key, long hash, void *value, void *oldvalue) */
+/* { */
+    /* register OptDictEntry *ep; */
+    /* typedef OptDictEntry *(*lookupfunc)(OptDict *, void *, long); */
+
+    /* oldvalue = NULL; */
+
+    /* assert(mp->ma_lookup != NULL); */
+    /* ep = mp->ma_lookup(mp, key, hash); */
+    /* if (ep == NULL) { */
+        /* return -1; */
+    /* } */
+    /* [> For Python garbage collection tracking <] */
+    /* [> MAINTAIN_TRACKING(mp, key, value); <] */
+    /* if (ep->me_value != NULL) { */
+        /* oldvalue = ep->me_value; */
+        /* ep->me_value = value; */
+    /* } */
+    /* else { */
+        /* if (ep->me_key == NULL) */
+            /* mp->ma_fill++; */
+        /* else { */
+            /* assert(ep->me_key == dummy); */
+        /* } */
+        /* ep->me_key = key; */
+        /* ep->me_hash = hash; */
+        /* ep->me_value = value; */
+        /* mp->ma_used++; */
+    /* } */
+    /* return 0; */
+/* } */
+
+/* Internal routine used by dictresize() to insert an item which is known to be
+ * absent from the dict.  This routine also assumes that the dict contains no
+ * deleted entries.  Besides the performance benefit, using insertdict() in
+ * dictresize() is dangerous (SF bug #1456209).  Note that no refcounts are
+ * changed by this routine; if needed, the caller is responsible for incref'ing
+ * `key` and `value`. 
+ */
+    /* static void */
+/* insertdict_clean(register OptDict *mp, void *key, long hash, */
+        /* void *value) */
+/* { */
+    /* register size_t i; */
+    /* register size_t perturb; */
+    /* register size_t mask = (size_t)mp->ma_mask; */
+    /* OptDictEntry *ep0 = mp->ma_table; */
+    /* register OptDictEntry *ep; */
+
+    /* [> XXX: FIXME: Not Implemented!!! <] */
+    /* assert(0); */
+
+    /* [> MAINTAIN_TRACKING(mp, key, value); <] */
+    /* i = hash & mask; */
+    /* ep = &ep0[i]; */
+    /* for (perturb = hash; ep->me_key != NULL; perturb >>= PERTURB_SHIFT) { */
+        /* i = (i << 2) + i + perturb + 1; */
+        /* ep = &ep0[i & mask]; */
+    /* } */
+    /* assert(ep->me_value == NULL); */
+    /* mp->ma_fill++; */
+    /* ep->me_key = key; */
+    /* ep->me_hash = hash; */
+    /* ep->me_value = value; */
+    /* mp->ma_used++; */
+/* } */
+
+/* Restructure the table by allocating a new table and reinserting all items
+ * again.  When entries have been deleted, the new table may actually be
+ * smaller than the old one.  
+ */
+    /* static int */
+/* dictresize(OptDict *mp, size_t minused) */
+/* { */
+    /* size_t newsize; */
+    /* OptDictEntry *oldtable, *newtable, *ep; */
+    /* size_t i; */
+    /* int is_oldtable_malloced; */
+    /* OptDictEntry small_copy[optdict_MINSIZE]; */
+
+    /* [> XXX: FIXME: Not Implemented!!! <] */
+    /* assert(0); */
+
+    /* assert(minused >= 0); */
+
+    /* [> Find the smallest table size > minused. <] */
+    /* for (newsize = optdict_MINSIZE; */
+            /* newsize <= minused && newsize > 0; */
+            /* newsize <<= 1) */
+        /* ; */
+    /* if (newsize <= 0) { */
+        /* return ERR_NO_MEM; */
+    /* } */
+
+    /* [> Get space for a new table. <] */
+    /* oldtable = mp->ma_table; */
+    /* assert(oldtable != NULL); */
+    /* is_oldtable_malloced = oldtable != mp->ma_smalltable; */
+
+    /* if (newsize == optdict_MINSIZE) { */
+        /* [> A large table is shrinking, or we can't get any smaller. <] */
+        /* newtable = mp->ma_smalltable; */
+        /* if (newtable == oldtable) { */
+            /* if (mp->ma_fill == mp->ma_used) { */
+                /* [> No dummies, so no point doing anything. <] */
+                /* return 0; */
+            /* } */
+            /* We're not going to resize it, but rebuild the table anyway to
+             * purge old dummy entries.  
+             * Subtle:  This is *necessary* if fill==size, as lookdict needs at
+             * least one virgin slot to terminate failing searches.  If fill <
+             * size, it's merely desirable, as dummies slow searches.
+             */
+            /* assert(mp->ma_fill > mp->ma_used); */
+            /* memcpy(small_copy, oldtable, sizeof(small_copy)); */
+            /* oldtable = small_copy; */
+        /* } */
+    /* } */
+    /* else { */
+        /* newtable = malloc(newsize * sizeof(OptDictEntry)); */
+        /* if (newtable == NULL) { */
+            /* return ERR_NO_MEM; */
+        /* } */
+    /* } */
+
+    /* [> Make the dict empty, using the new table. <] */
+    /* assert(newtable != oldtable); */
+    /* mp->ma_table = newtable; */
+    /* mp->ma_mask = newsize - 1; */
+    /* memset(newtable, 0, sizeof(OptDictEntry) * newsize); */
+    /* mp->ma_used = 0; */
+    /* i = mp->ma_fill; */
+    /* mp->ma_fill = 0; */
+
+    /* Copy the data over; this is refcount-neutral for active entries;
+     * dummy entries aren't copied over, of course 
+     */
+    /* for (ep = oldtable; i > 0; ep++) { */
+        /* if (ep->me_value != NULL) {             [> active entry <] */
+            /* --i; */
+            /* insertdict_clean(mp, ep->me_key, ep->me_hash, */
+                    /* ep->me_value); */
+        /* } */
+        /* else if (ep->me_key != NULL) {          [> dummy entry <] */
+            /* --i; */
+            /* assert(ep->me_key == dummy); */
+        /* } */
+        /* [> else key == value == NULL:  nothing to do <] */
+    /* } */
+
+    /* if (is_oldtable_malloced) */
+        /* free(oldtable); */
+    /* return 0; */
+/* } */
+
+/* CAUTION: OptDict_SetItem() must guarantee that it won't resize the
+ * dictionary if it's merely replacing the value for an existing key.  This
+ * means that it's safe to loop over a dictionary with OptDict_Next() and
+ * occasionally replace a value -- but you can't insert new keys or remove
+ * them.
+ */
+    /* int */
+/* OptDict_SetItem(register OptDict *mp, void *key, register long hash, void *value, void *oldvalue) */
+/* { */
+    /* register size_t n_used; */
+
+    /* assert(key); */
+    /* assert(value); */
+    /* if (hash == -1) */
+        /* return -1; */
+    /* assert(mp->ma_fill <= mp->ma_mask);  [> at least one empty slot <] */
+    /* n_used = mp->ma_used; */
+    /* [> XXX: Finish me!!! <] */
+    /* if (insertdict(mp, key, hash, value, oldvalue) != 0) */
+        /* return -1; */
+    /* If we added a key, we can safely resize.  Otherwise just return!
+     * If fill >= 2/3 size, adjust size.  Normally, this doubles or
+     * quaduples the size, but it's also possible for the dict to shrink
+     * (if ma_fill is much larger than ma_used, meaning a lot of dict
+     * keys have been deleted).
+     *
+     * Quadrupling the size improves average dictionary sparseness
+     * (reducing collisions) at the cost of some memory and iteration
+     * speed (which loops over every possible entry).  It also halves
+     * the number of expensive resize operations in a growing dictionary.
+     *
+     * Very large dictionaries (over 50K items) use doubling instead.
+     * This may help applications with severe memory constraints.
+     */
+    /* if (!(mp->ma_used > n_used && mp->ma_fill*3 >= (mp->ma_mask+1)*2)) */
+        /* return 0; */
+    /* return dictresize(mp, (mp->ma_used > 50000 ? 2 : 4) * mp->ma_used); */
+/* } */

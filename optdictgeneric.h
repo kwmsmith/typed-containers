@@ -33,6 +33,16 @@ enum type_enum {
  *  } OptDictEntry;
  */
 
+#define GET_ENTRY(mp, ep0, i) (&((ep0)[i * (mp)->entry_size]))
+
+#define GET_KEYP(mp, ep) (&((ep)[(mp)->key_ofs]))
+
+#define GET_VALP(mp, ep) (&((ep)[(mp)->val_ofs]))
+
+#define GET_FLAGS(mp, ep) (*((long*)&(ep)[(mp)->flags_ofs]))
+
+#define GET_HASH(mp, ep)  (*((long*)(ep)))
+
 typedef char OptDictEntry;
 
 #define FLAG_USED 1

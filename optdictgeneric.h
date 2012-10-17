@@ -35,13 +35,21 @@ enum type_enum {
 
 #define GET_ENTRY(mp, ep0, i) (&((ep0)[i * (mp)->entry_size]))
 
+#define GET_HASHP(mp, ep)  ((long*)&(ep)[0])
+
+#define SET_HASH(mp, ep, h) (memcpy(GET_HASHP((mp), (ep)), (h), sizeof(h)))
+
 #define GET_KEYP(mp, ep) (&((ep)[(mp)->key_ofs]))
+
+#define SET_KEY(mp, ep, kp) (memcpy(GET_KEYP((mp), (ep)), (kp), (mp)->key_size))
 
 #define GET_VALP(mp, ep) (&((ep)[(mp)->val_ofs]))
 
-#define GET_FLAGS(mp, ep) (*((long*)&(ep)[(mp)->flags_ofs]))
+#define SET_VAL(mp, ep, vp) (memcpy(GET_VALP((mp), (ep)), (vp), (mp)->val_size))
 
-#define GET_HASH(mp, ep)  (*((long*)(ep)))
+#define GET_FLAGSP(mp, ep) ((long*)&(ep)[(mp)->flags_ofs])
+
+#define SET_FLAGS(mp, ep, f) (memcpy(GET_FLAGSP((mp), (ep)), (f), sizeof(f)))
 
 typedef char OptDictEntry;
 
@@ -68,6 +76,8 @@ struct _optdict {
     size_t flags_ofs;
     size_t key_ofs;
     size_t val_ofs;
+    size_t key_size;
+    size_t val_size;
     OptDictEntry *ma_table;
     OptDictEntry *(*ma_lookup)(OptDict *mp, void *key, long hash);
     int (*eqfunc)(void *, void *);

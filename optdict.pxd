@@ -10,5 +10,5 @@ cdef extern from "optdictgeneric.h":
         DOUBLE
 
     _OptDict *OptDict_New(int, int)
-    # int OptDict_SetItem(_OptDict *mp, void *key, long hash, void *value, void *oldvalue)
+    int OptDict_SetItem(_OptDict *mp, void *key, long hash, void *value, void *oldvalue)
     long int_hash(int)

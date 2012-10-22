@@ -209,6 +209,9 @@ lookdict(OptDict *mp, void *key, register long hash);
     OptDict *
 OptDict_New(enum type_enum key_type, enum type_enum val_type)
 {
+#ifdef CHATTY
+    printf("OptDict_New called\n");
+#endif
     register OptDict *mp;
     size_t table_size;
     if (dummy == NULL) { /* Auto-initialize dummy */
@@ -271,6 +274,9 @@ int_hash(int x)
     static OptDictEntry *
 lookdict(OptDict *mp, void *key, register long hash)
 {
+#ifdef CHATTY
+    printf("lookdict called\n");
+#endif
     register size_t i;
     register size_t perturb;
     register OptDictEntry *freeslot;
@@ -324,6 +330,9 @@ lookdict(OptDict *mp, void *key, register long hash)
     static int
 insertdict(register OptDict *mp, void *key, long hash, void *value, void *oldvalue)
 {
+#ifdef CHATTY
+    printf("insertdict called\n");
+#endif
     register OptDictEntry *ep;
     typedef OptDictEntry *(*lookupfunc)(OptDict *, void *, long);
 
@@ -367,6 +376,9 @@ insertdict(register OptDict *mp, void *key, long hash, void *value, void *oldval
 insertdict_clean(register OptDict *mp, void *key, long hash,
         void *value)
 {
+#ifdef CHATTY
+    printf("insertdict_clean called\n");
+#endif
     register size_t i;
     register size_t perturb;
     register size_t mask = (size_t)mp->ma_mask;
@@ -398,6 +410,9 @@ insertdict_clean(register OptDict *mp, void *key, long hash,
     static int
 dictresize(OptDict *mp, size_t minused)
 {
+#ifdef CHATTY
+    printf("dictresize called\n");
+#endif
     size_t newsize;
     OptDictEntry *oldtable, *newtable, *ep;
     size_t i;
@@ -459,6 +474,9 @@ dictresize(OptDict *mp, size_t minused)
     int
 OptDict_SetItem(register OptDict *mp, void *key, register long hash, void *value, void *oldvalue)
 {
+#ifdef CHATTY
+    printf("OptDict_SetItem called\n");
+#endif
     register size_t n_used;
 
     assert(key);
@@ -483,6 +501,9 @@ OptDict_SetItem(register OptDict *mp, void *key, register long hash, void *value
      * Very large dictionaries (over 50K items) use doubling instead.
      * This may help applications with severe memory constraints.
      */
+#ifdef CHATTY
+    printf("OptDict_SetItem: %ld %ld %ld %ld\n", mp->ma_used, n_used, mp->ma_fill, mp->ma_mask);
+#endif
     if (!(mp->ma_used > n_used && mp->ma_fill*3 >= (mp->ma_mask+1)*2))
         return 0;
     return dictresize(mp, (mp->ma_used > 50000 ? 2 : 4) * mp->ma_used);

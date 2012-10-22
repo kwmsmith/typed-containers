@@ -4,6 +4,8 @@
 extern "C" {
 #endif
 
+#define CHATTY
+
 #define optdict_MINSIZE 8
 #define ERR_NO_MEM -1
 
@@ -84,6 +86,7 @@ struct _optdict {
 };
 
 OptDict *OptDict_New(enum type_enum, enum type_enum);
+int OptDict_SetItem(OptDict *mp, void *key, long hash, void *value, void *oldvalue);
 
 long int_hash(int);
 

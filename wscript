@@ -12,6 +12,8 @@ def configure(ctx):
     ctx.check_python_headers()
     ctx.load('cython')
 
+    ctx.env.CFLAGS += '-Wall -O3 -pedantic -std=c99'.split()
+
 def build(ctx):
     # ctx(features = 'c cshlib',
         # source = 'optdictbase.c',
@@ -23,5 +25,10 @@ def build(ctx):
         target = 'optdict',
         includes = '. ..',
         )
+
+    ctx.recurse('hamt')
+
+def test(ctx):
+    print ctx, dir(ctx)
 
 # vim:ft=python

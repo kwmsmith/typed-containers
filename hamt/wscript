@@ -1,0 +1,22 @@
+
+def build(ctx):
+    ctx(features = 'c cshlib pyext',
+        source = 'hamt.c hamtpy.pyx',
+        target = 'hamtpy',
+        includes = '.', 
+        )
+    ctx(source = '__init__.py',
+            target= '__init__.py',
+            rule = 'cp ${SRC} ${TGT}',
+            )
+    # ctx(features='py',
+            # source='__init__.py',
+            # install_from = '.',
+            # )
+    # ctx(features = 'c cshlib',
+        # source = 'hamt.c',
+        # target = 'hamt',
+        # includes = '. ..',
+        # )
+
+# vim:ft=python

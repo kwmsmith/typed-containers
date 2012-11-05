@@ -194,39 +194,40 @@ HAMT_insert(HAMT *hamt, void *key,
 
     ep = hamt->root + index;
 
-    if (IS_KEY_VAL_SLOT(ep)) {
-        if (!ep->key) {
-            /* case: no collision, empty slot. */
+    if (!ep->key) {
+        /* Special case for top-level root hash table. */
+        /* case: no collision, empty slot for root hash table. */
 #               ifdef CHATTY
-            printf("inserting at index: %d\n", index);
+        printf("inserting at index: %d\n", index);
 #               endif
-            assert(!ep->value);
-            ep->key = key;
-            ep->value = value;
-            return value;
-        }
-        else {
-            /* Case: collision */
+        assert(!ep->value);
+        ep->key = key;
+        ep->value = value;
+        return value;
+    }
 
-            /* check for key equality */
-            if (key == ep->key || (*eq_func)(key, ep->key)) {
-                /* keys are the same, insert here */
-                (*deletefunc)(ep->key);
-                (*deletefunc)(ep->value);
+    if (IS_KEY_VAL_SLOT(ep)) {
+        /* Case: collision */
+        assert(ep->key);
+
+        /* check for key equality */
+        if (key == ep->key || (*eq_func)(key, ep->key)) {
+            /* keys are the same, insert here */
+            (*deletefunc)(ep->key);
+            (*deletefunc)(ep->value);
 #               ifdef CHATTY
             printf("replacing at index: %d\n", index);
 #               endif
-                ep->key = key;
-                ep->value = value;
-            }
-            else {
-                HAMT_insert_new_sub_trie(ep, BITS_PER_HASH_MINSIZE, hash_func);
-                /* assert(0); [> XXX: Implement this function!!! <] */
-                HAMT_insert_into_sub_trie(ep, BITS_PER_HASH_MINSIZE, hash, 
-                        hash_func, eq_func, deletefunc, key, value);
-            }
+            ep->key = key;
+            ep->value = value;
         }
-    } 
+        else {
+            HAMT_insert_new_sub_trie(ep, BITS_PER_HASH_MINSIZE, hash_func);
+            /* assert(0); [> XXX: Implement this function!!! <] */
+            HAMT_insert_into_sub_trie(ep, BITS_PER_HASH_MINSIZE, hash, 
+                    hash_func, eq_func, deletefunc, key, value);
+        }
+    }
     else {
         /* case: ep is a sub trie, descend into it */
         assert(IS_SUB_TRIE_SLOT(ep));

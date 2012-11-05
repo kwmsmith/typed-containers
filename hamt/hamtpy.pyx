@@ -1,3 +1,5 @@
+from cpython.ref cimport Py_INCREF
+
 cdef int eq_func(void *o1, void *o2):
     if <object>o1 == <object>o2:
         return 1
@@ -19,11 +21,15 @@ cdef class hamtpy:
             raise MemoryError("Unable to create a new HAMT object")
 
     def __setitem__(self, key, value):
-        cdef int replace
-        replace = 1
+        Py_INCREF(key)
+        Py_INCREF(value)
         HAMT_insert(self._thisptr,
                 <void*>key, <void*>value, 
-                &replace,
                 python_hash,
                 eq_func,
                 deletefunc)
+
+    def __dealloc__(self):
+        if self._thisptr:
+            HAMT_delete(self._thisptr, deletefunc)
+            self._thisptr = NULL

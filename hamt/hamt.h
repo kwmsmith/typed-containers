@@ -22,24 +22,18 @@ HAMT *HAMT_new();
 /* Deletes HAMT and all data associated with it using deletefunc() on each data
  * item.
  */
-/* void HAMT_delete(HAMT *, void (*deletefunc)(void *data)); */
+void HAMT_delete(HAMT *, void (*deletefunc)(void *data)); 
 
 /*
  * Inserts key into HAMT, associating it with data.
  *
- * If the key is not present in the HAMT, inserts it, sets *replace to 1, and
- * returns the data passed in.
+ * If the key is not present in the HAMT, inserts it.
  *
- * If the key is already present and *replace is 0, deletes the data passed in
- * using deletefunc() and returns the data currently associated with the key.
- *
- * If the key is already present and *replace is 1, deletes the data currently
- * associated with the key using deletefunc() and replaces it with the data
- * passed in.
+ * If the key is already present, deletes the data currently associated with
+ * the key using deletefunc() and replaces it with the data passed in.
  */
     void *
-HAMT_insert(HAMT *hamt, void *key, 
-        void *value, int *replace,
+HAMT_insert(HAMT *hamt, void *key, void *value, 
         unsigned long (*hash_func)(void *),
         int (*eq_func)(void *, void *),
         void (*deletefunc)(void *));
@@ -51,7 +45,7 @@ HAMT_insert(HAMT *hamt, void *key,
 /* Searches for the data associated with a key in the HAMT. If the key is not
  * present, returns NULL.
  */
-/* void *HAMT_search(HAMT *hamt, const void *key, long (*hashfunc)(const void *key)); */
+void *HAMT_search(HAMT *hamt, void *key, unsigned long (*hash_func)(void *), int (*eq_func)(void *, void *));
 
 /* Traverse over all keys in HAMT, calling func() for each data item.  Stops
  * early if func returns 0.

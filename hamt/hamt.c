@@ -10,6 +10,8 @@
 #define __assert(e, file, line) \
     ((void)printf ("%s:%u: failed assertion `%s'\n", file, line, e), exit(1))
 
+/* #define assert(e) ((void)0) */
+
 /* #define CHATTY */
 
 #define GET_SUB_TRIE_PTR(ep) ((HAMT_entry*)((intptr_t)(ep)->value & ~1))
@@ -19,7 +21,7 @@
 
 static int num_sub_trie = 0;
 
-int
+    int
 popcount(uintptr_t a)
 {
     assert(sizeof(uintptr_t) == sizeof(unsigned int));
@@ -57,7 +59,7 @@ success:
     return hamt;
 }
 
-static void
+    static void
 HAMT_insert_new_sub_trie(HAMT_entry *ep, int nbits_used, 
         unsigned long(*hash_func)(void*))
 {
@@ -96,63 +98,60 @@ HAMT_insert_new_sub_trie(HAMT_entry *ep, int nbits_used,
 }
 
 
-static void
+    static void
 HAMT_insert_into_sub_trie(HAMT_entry *ep, 
-        int nbits_used, 
-        unsigned long hash,
+        int nbits_used, unsigned long hash,
         unsigned long (*hash_func)(void *),
         int (*eq_func)(void *, void *),
         void (*deletefunc)(void *),
         void *key, void *value)
 {
-    /* assert(0); [> XXX: Cut and paste -- needs refactoring!!! <] */
     unsigned int sub_index = 0;
-    HAMT_entry *sub_trie = GET_SUB_TRIE_PTR(ep);
+    HAMT_entry *sub_trie = NULL;
+    int insert_index = 0;
+
     /* XXX: FIXME: what happens when nbits_used > BITS_PER_PTR??? */
     assert(nbits_used < BITS_PER_PTR);
+
+    if (IS_KEY_VAL_SLOT(ep)) {
+        /* Case: collision */
+        assert(ep->key);
+
+        /* check for key equality */
+        if (key == ep->key || (*eq_func)(key, ep->key)) {
+            /* keys are the same, insert here */
+            (*deletefunc)(ep->key);
+            (*deletefunc)(ep->value);
+            ep->key = key;
+            ep->value = value;
+        }
+        else {
+            HAMT_insert_new_sub_trie(ep, nbits_used, hash_func);
+            HAMT_insert_into_sub_trie(ep, nbits_used, hash, 
+                    hash_func, eq_func, deletefunc, key, value);
+        }
+        return;
+    }
+    /* sub_trie_slot */
+
+    assert(IS_SUB_TRIE_SLOT(ep));
+    sub_trie = GET_SUB_TRIE_PTR(ep);
     sub_index = (hash >> nbits_used) & (HASH_MINSIZE-1);
     assert(sub_index >= 0 && sub_index < BITS_PER_PTR);
 
     /* find index at which to insert; zero-based. */
-    int insert_index = popcount((uintptr_t)ep->key & ((1<<sub_index)-1));
-    int num_inserted = popcount((uintptr_t)ep->key);
-
-    assert(num_inserted > 0);
-    assert(num_inserted <= BITS_PER_PTR);
-    assert(insert_index >= 0 && insert_index <= num_inserted);
+    insert_index = popcount((uintptr_t)ep->key & ((1<<sub_index)-1));
 
     if((uintptr_t)ep->key & (1<<sub_index)) {
         /* case: bitmask is full at sub_index, another collision. */
-        ep = sub_trie + insert_index;
-        if (IS_KEY_VAL_SLOT(ep)) {
-            /* Case: collision */
-            assert(ep->key);
-
-            /* check for key equality */
-            if (key == ep->key || (*eq_func)(key, ep->key)) {
-                /* keys are the same, insert here */
-                (*deletefunc)(ep->key);
-                (*deletefunc)(ep->value);
-#ifdef CHATTY
-                printf("HAMT_insert_into_sub_trie:replacing at index: %d\n", sub_index);
-#endif
-                ep->key = key;
-                ep->value = value;
-            }
-            else {
-                HAMT_insert_new_sub_trie(ep, nbits_used + BITS_PER_HASH_MINSIZE, hash_func);
-                HAMT_insert_into_sub_trie(ep, nbits_used + BITS_PER_HASH_MINSIZE, hash, hash_func, 
-                        eq_func, deletefunc, key, value);
-            }
-        } 
-        else {
-            /* case: ep is a sub trie, descend into it */
-            assert(IS_SUB_TRIE_SLOT(ep));
-            HAMT_insert_into_sub_trie(ep, nbits_used + BITS_PER_HASH_MINSIZE, 
-                    hash, hash_func, eq_func, deletefunc, key, value);
-        }
-    }
+        HAMT_insert_into_sub_trie(sub_trie + insert_index, nbits_used + BITS_PER_HASH_MINSIZE, 
+                hash, hash_func, eq_func, deletefunc, key, value);
+    }   
     else {
+        int num_inserted = popcount((uintptr_t)ep->key);
+        assert(num_inserted > 0);
+        assert(num_inserted <= BITS_PER_PTR);
+        assert(insert_index >= 0 && insert_index <= num_inserted);
         /* case: bitmask is empty at sub_index. */
 
         /* shift the larger values up one */
@@ -160,11 +159,6 @@ HAMT_insert_into_sub_trie(HAMT_entry *ep,
                 sizeof(HAMT_entry) * (num_inserted - insert_index));
 
         /* insert the entry at the insert_index location */
-#ifdef CHATTY
-                printf("HAMT_insert_into_sub_trie:sub_trie: %p "
-                        "replacing at index: %d num_inserted:%d nbits_used:%d\n",
-                        sub_trie, insert_index, num_inserted, nbits_used);
-#endif
         sub_trie[insert_index].key = key;
         sub_trie[insert_index].value = value;
         ep->key = (void*)((intptr_t)ep->key | (1<<insert_index));
@@ -206,34 +200,8 @@ HAMT_insert(HAMT *hamt, void *key,
         return value;
     }
 
-    if (IS_KEY_VAL_SLOT(ep)) {
-        /* Case: collision */
-        assert(ep->key);
-
-        /* check for key equality */
-        if (key == ep->key || (*eq_func)(key, ep->key)) {
-            /* keys are the same, insert here */
-            (*deletefunc)(ep->key);
-            (*deletefunc)(ep->value);
-#               ifdef CHATTY
-            printf("replacing at index: %d\n", index);
-#               endif
-            ep->key = key;
-            ep->value = value;
-        }
-        else {
-            HAMT_insert_new_sub_trie(ep, BITS_PER_HASH_MINSIZE, hash_func);
-            /* assert(0); [> XXX: Implement this function!!! <] */
-            HAMT_insert_into_sub_trie(ep, BITS_PER_HASH_MINSIZE, hash, 
-                    hash_func, eq_func, deletefunc, key, value);
-        }
-    }
-    else {
-        /* case: ep is a sub trie, descend into it */
-        assert(IS_SUB_TRIE_SLOT(ep));
-        HAMT_insert_into_sub_trie(ep, BITS_PER_HASH_MINSIZE, 
-                hash, hash_func, eq_func, deletefunc, key, value);
-    }
+    HAMT_insert_into_sub_trie(ep, BITS_PER_HASH_MINSIZE, 
+            hash, hash_func, eq_func, deletefunc, key, value);
     return NULL;
 }
 

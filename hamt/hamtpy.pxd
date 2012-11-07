@@ -12,6 +12,10 @@ cdef extern from "hamt.h":
 
     void HAMT_delete(HAMT *, void (*deletefunc)(void *data))
 
+    void *HAMT_search(HAMT *hamt, void *key, 
+            unsigned long (*hash_func)(void *), 
+            int (*eq_func)(void *, void *))
+
 cdef class hamtpy:
     cdef HAMT *_thisptr
 

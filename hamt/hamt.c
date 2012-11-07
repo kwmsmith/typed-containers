@@ -99,71 +99,75 @@ HAMT_insert_new_sub_trie(HAMT_entry *ep, int nbits_used,
 
 
     static void
-HAMT_insert_into_sub_trie(HAMT_entry *ep, 
+HAMT_insert_into_sub_trie(register HAMT_entry *ep, 
         int nbits_used, unsigned long hash,
         unsigned long (*hash_func)(void *),
         int (*eq_func)(void *, void *),
         void (*deletefunc)(void *),
         void *key, void *value)
 {
-    unsigned int sub_index = 0;
     HAMT_entry *sub_trie = NULL;
+    unsigned int sub_index = 0;
     int insert_index = 0;
+    int num_inserted = 0;
 
-    /* XXX: FIXME: what happens when nbits_used > BITS_PER_PTR??? */
-    assert(nbits_used < BITS_PER_PTR);
+    while (1) {
+        /* XXX: FIXME: what happens when nbits_used > BITS_PER_PTR??? */
+        assert(nbits_used < BITS_PER_PTR);
+        if (IS_KEY_VAL_SLOT(ep)) {
+            /* Case: collision */
+            assert(ep->key);
 
-    if (IS_KEY_VAL_SLOT(ep)) {
-        /* Case: collision */
-        assert(ep->key);
-
-        /* check for key equality */
-        if (key == ep->key || (*eq_func)(key, ep->key)) {
-            /* keys are the same, insert here */
-            (*deletefunc)(ep->key);
-            (*deletefunc)(ep->value);
-            ep->key = key;
-            ep->value = value;
+            /* check for key equality */
+            if (!(key == ep->key || (*eq_func)(key, ep->key))) {
+                HAMT_insert_new_sub_trie(ep, nbits_used, hash_func);
+                continue;
+            }
+            else {
+                /* keys are the same, insert here */
+                (*deletefunc)(ep->key);
+                (*deletefunc)(ep->value);
+                ep->key = key;
+                ep->value = value;
+                return;
+            }
         }
+        /* sub_trie_slot */
+
+        assert(IS_SUB_TRIE_SLOT(ep));
+        sub_trie = GET_SUB_TRIE_PTR(ep);
+        sub_index = (hash >> nbits_used) & (HASH_MINSIZE-1);
+        assert(sub_index >= 0 && sub_index < BITS_PER_PTR);
+
+        /* find index at which to insert; zero-based. */
+        insert_index = popcount((uintptr_t)ep->key & ((1<<sub_index)-1));
+
+        if((uintptr_t)ep->key & (1<<sub_index)) {
+            /* case: bitmask is full at sub_index, another collision. */
+            ep = sub_trie + insert_index;
+            nbits_used += BITS_PER_HASH_MINSIZE;
+            continue;
+        }   
         else {
-            HAMT_insert_new_sub_trie(ep, nbits_used, hash_func);
-            HAMT_insert_into_sub_trie(ep, nbits_used, hash, 
-                    hash_func, eq_func, deletefunc, key, value);
+            num_inserted = popcount((uintptr_t)ep->key);
+            assert(num_inserted > 0);
+            assert(num_inserted <= BITS_PER_PTR);
+            assert(insert_index >= 0 && insert_index <= num_inserted);
+            /* case: bitmask is empty at sub_index. */
+
+            /* shift the larger values up one */
+            memmove(sub_trie + (insert_index+1), sub_trie + insert_index,
+                    sizeof(HAMT_entry) * (num_inserted - insert_index));
+
+            /* insert the entry at the insert_index location */
+            sub_trie[insert_index].key = key;
+            sub_trie[insert_index].value = value;
+            ep->key = (void*)((intptr_t)ep->key | (1<<insert_index));
+            assert(popcount((uintptr_t)ep->key) == num_inserted + 1);
+            return;
         }
-        return;
     }
-    /* sub_trie_slot */
-
-    assert(IS_SUB_TRIE_SLOT(ep));
-    sub_trie = GET_SUB_TRIE_PTR(ep);
-    sub_index = (hash >> nbits_used) & (HASH_MINSIZE-1);
-    assert(sub_index >= 0 && sub_index < BITS_PER_PTR);
-
-    /* find index at which to insert; zero-based. */
-    insert_index = popcount((uintptr_t)ep->key & ((1<<sub_index)-1));
-
-    if((uintptr_t)ep->key & (1<<sub_index)) {
-        /* case: bitmask is full at sub_index, another collision. */
-        HAMT_insert_into_sub_trie(sub_trie + insert_index, nbits_used + BITS_PER_HASH_MINSIZE, 
-                hash, hash_func, eq_func, deletefunc, key, value);
-    }   
-    else {
-        int num_inserted = popcount((uintptr_t)ep->key);
-        assert(num_inserted > 0);
-        assert(num_inserted <= BITS_PER_PTR);
-        assert(insert_index >= 0 && insert_index <= num_inserted);
-        /* case: bitmask is empty at sub_index. */
-
-        /* shift the larger values up one */
-        memmove(sub_trie + (insert_index+1), sub_trie + insert_index,
-                sizeof(HAMT_entry) * (num_inserted - insert_index));
-
-        /* insert the entry at the insert_index location */
-        sub_trie[insert_index].key = key;
-        sub_trie[insert_index].value = value;
-        ep->key = (void*)((intptr_t)ep->key | (1<<insert_index));
-        assert(popcount((uintptr_t)ep->key) == num_inserted + 1);
-    }
+    assert(0); /* Should never get here */
 }
 
     void *
@@ -210,18 +214,49 @@ HAMT_search_sub_trie(HAMT_entry *ep, int nbits_used,
         unsigned long hash, unsigned long (*hash_func)(void *),
         int (*eq_func)(void*, void*), void *key)
 {
-    assert(0);
-    return NULL;
+    HAMT_entry *sub_trie = NULL;
+    unsigned int sub_index = 0;
+    int insert_index = 0;
+    int num_inserted = 0;
+
+    while (1) {
+        /* XXX: FIXME: what happens when nbits_used > BITS_PER_PTR??? */
+        assert(nbits_used < BITS_PER_PTR);
+        if (IS_KEY_VAL_SLOT(ep)) {
+            /* Case: collision */
+            assert(ep->key);
+            return (key == ep->key || (*eq_func)(key, ep->key)) ? ep->value : NULL;
+        }
+        /* sub_trie_slot */
+
+        assert(IS_SUB_TRIE_SLOT(ep));
+        sub_trie = GET_SUB_TRIE_PTR(ep);
+        sub_index = (hash >> nbits_used) & (HASH_MINSIZE-1);
+        assert(sub_index >= 0 && sub_index < BITS_PER_PTR);
+
+        /* find index to search; zero-based. */
+        insert_index = popcount((uintptr_t)ep->key & ((1<<sub_index)-1));
+
+        if((uintptr_t)ep->key & (1<<sub_index)) {
+            /* case: bitmask is full at sub_index, another collision. */
+            ep = sub_trie + insert_index;
+            nbits_used += BITS_PER_HASH_MINSIZE;
+            continue;
+        }   
+        else 
+            return NULL;
+    }
+    assert(0); /* Should never get here */
 }
 
     void *
-HAMT_search(HAMT *hamt, void *key, unsigned long (*hash_func)(void *), int (*eq_func)(void *, void *))
+HAMT_search(HAMT *hamt, void *key, 
+        unsigned long (*hash_func)(void *), 
+        int (*eq_func)(void *, void *))
 {
     unsigned long hash = 0;
     unsigned int index = 0;
     HAMT_entry *ep = NULL;
-
-    assert(0); /* XXX: check logic; not implemented all the way yet... */
 
     assert(hamt); assert(hamt->root);
     assert(hash_func); assert(key);
@@ -234,28 +269,11 @@ HAMT_search(HAMT *hamt, void *key, unsigned long (*hash_func)(void *), int (*eq_
 
     ep = hamt->root + index;
 
-    if (IS_KEY_VAL_SLOT(ep)) {
-        if (!ep->key) {
-            assert(!ep->value);
-            return NULL;
-        }
-        else {
-            /* Case: collision */
-
-            /* check for key equality */
-            if (key == ep->key || (*eq_func)(key, ep->key)) {
-                /* keys are the same, insert here */
-                assert(ep->value);
-                return ep->value;
-            }
-        }
-    } 
-    else {
-        /* case: ep is a sub trie, descend into it */
-        assert(IS_SUB_TRIE_SLOT(ep));
-        return HAMT_search_sub_trie(ep, BITS_PER_HASH_MINSIZE, hash, hash_func, eq_func, key);
+    if (!ep->key) {
+        assert(!ep->value);
+        return NULL;
     }
-    return NULL;
+    return HAMT_search_sub_trie(ep, BITS_PER_HASH_MINSIZE, hash, hash_func, eq_func, key);
 }
 
     void 

@@ -20,6 +20,13 @@ cdef class hamtpy:
         if not self._thisptr:
             raise MemoryError("Unable to create a new HAMT object")
 
+    def __getitem__(self, key):
+        cdef object res = <object>HAMT_search(self._thisptr,
+                <void *>key, python_hash, eq_func)
+        if not res:
+            raise KeyError()
+        return res
+
     def __setitem__(self, key, value):
         Py_INCREF(key)
         Py_INCREF(value)

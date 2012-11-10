@@ -34,28 +34,16 @@ typedef struct {
 } HAMT_entry;
 
 struct HAMT {
-    HAMT_entry *root;
+    HAMT_entry root[HASH_MINSIZE];
 };
 
     HAMT *
 HAMT_new()
 {
-    int i;
     HAMT *hamt = NULL;
-    hamt = malloc(sizeof(HAMT));
-    if (!hamt)
+    if (!(hamt = malloc(sizeof(HAMT))))
         return NULL;
-    hamt->root = malloc(HASH_MINSIZE * sizeof(HAMT_entry));
-    if (!hamt->root)
-        goto fail;
-    for (i=0; i<HASH_MINSIZE; i++) {
-        hamt->root[i].key = hamt->root[i].value = NULL;
-    }
-    goto success;
-fail:
-    if (hamt)
-        free(hamt);
-success:
+    memset(hamt->root, 0, sizeof(HAMT_entry) * HASH_MINSIZE);
     return hamt;
 }
 
@@ -271,7 +259,7 @@ HAMT_search(HAMT *hamt, void *key,
 
     if (!ep->key) {
         assert(!ep->value);
-        return NULL;
+        return ep->value;
     }
     return HAMT_search_sub_trie(ep, BITS_PER_HASH_MINSIZE, hash, hash_func, eq_func, key);
 }

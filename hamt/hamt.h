@@ -13,7 +13,15 @@ CT_ASSERT(CHAR_BIT == 8);
 #define BITS_PER_HASH_MINSIZE 5
 #define HASH_MINSIZE (1<<BITS_PER_HASH_MINSIZE)
 
-typedef struct HAMT HAMT;
+typedef struct {
+    void *key;
+    void *value;
+} HAMT_entry;
+
+typedef struct {
+    HAMT_entry root[HASH_MINSIZE];
+} HAMT;
+
 
 /* Creates new, empty, HAMT.
  */
@@ -45,7 +53,7 @@ HAMT_insert(HAMT *hamt, void *key, void *value,
 /* Searches for the data associated with a key in the HAMT. If the key is not
  * present, returns NULL.
  */
-void *HAMT_search(HAMT *hamt, void *key, unsigned long (*hash_func)(void *), int (*eq_func)(void *, void *));
+HAMT_entry *HAMT_search(HAMT *hamt, void *key, unsigned long (*hash_func)(void *), int (*eq_func)(void *, void *));
 
 /* Traverse over all keys in HAMT, calling func() for each data item.  Stops
  * early if func returns 0.

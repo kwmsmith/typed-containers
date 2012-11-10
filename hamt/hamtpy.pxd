@@ -3,6 +3,11 @@ from cpython.object cimport PyObject_Hash
 cdef extern from "hamt.h":
     ctypedef struct HAMT:
         pass
+
+    ctypedef struct HAMT_entry:
+        void *key
+        void *value
+
     HAMT *HAMT_new()
 
     void * HAMT_insert(HAMT *hamt, void *key, void *value,
@@ -12,7 +17,7 @@ cdef extern from "hamt.h":
 
     void HAMT_delete(HAMT *, void (*deletefunc)(void *data))
 
-    void *HAMT_search(HAMT *hamt, void *key, 
+    HAMT_entry *HAMT_search(HAMT *hamt, void *key, 
             unsigned long (*hash_func)(void *), 
             int (*eq_func)(void *, void *))
 

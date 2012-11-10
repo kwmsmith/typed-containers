@@ -10,20 +10,19 @@ def _test_insert():
 def test_search():
     h = hamtpy()
     for i in xrange(32**4):
-        # ch = chr((i % 26) + ord('a'))
-        h[i] = 'a'
+        h[i] = i
 
     for i in xrange(32**4):
-        assert h[i] == 'a'
+        assert h[i] == i, `h[i], i`
 
-def _test_search_dict():
+def test_search_dict():
     h = {}
     for i in xrange(32**4):
         # ch = chr((i % 26) + ord('a'))
-        h[i] = 'a'
+        h[i] = i
 
     for i in xrange(32**4):
-        assert h[i] == 'a'
+        assert h[i] == i
 
 def _test_insert_dict():
     # gc.disable()

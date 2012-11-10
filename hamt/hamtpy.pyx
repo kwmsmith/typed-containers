@@ -23,7 +23,7 @@ cdef class hamtpy:
     def __getitem__(self, key):
         cdef object res = <object>HAMT_search(self._thisptr,
                 <void *>key, python_hash, eq_func)
-        if not res:
+        if <void*>res == NULL:
             raise KeyError()
         return res
 

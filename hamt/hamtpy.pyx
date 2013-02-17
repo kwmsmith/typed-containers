@@ -1,17 +1,21 @@
-from cpython.ref cimport Py_INCREF
+from cpython.ref cimport Py_INCREF, Py_DECREF
 
 cdef int eq_func(void *o1, void *o2):
     if <object>o1 == <object>o2:
         return 1
     return 0
 
-cdef void deletefunc(void *data):
-    pass
+cdef inline void deletefunc(void *data):
+    Py_DECREF(<object>data)
 
 cdef unsigned long python_hash(void *vv):
     # XXX: FIXME: exception?
-    cdef object key = <object>vv
-    return PyObject_Hash(key)
+    return PyObject_Hash(<object>vv)
+
+cdef unsigned long hash_int(void *vv):
+    cdef object k = <object>vv
+    cdef long i = k
+    return <unsigned long>i
 
 cdef class hamtpy:
 
@@ -23,7 +27,7 @@ cdef class hamtpy:
     def __getitem__(self, key):
         cdef HAMT_entry *res = NULL
         res = HAMT_search(self._thisptr,
-                <void *>key, python_hash, eq_func)
+                <void *>key, hash_int, eq_func)
         if <void*>res == NULL:
             raise KeyError()
         return <object>res.value
@@ -33,7 +37,7 @@ cdef class hamtpy:
         Py_INCREF(value)
         HAMT_insert(self._thisptr,
                 <void*>key, <void*>value, 
-                python_hash,
+                hash_int,
                 eq_func,
                 deletefunc)
 

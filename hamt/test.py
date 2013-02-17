@@ -1,9 +1,11 @@
 from hamtpy import hamtpy
 # import gc
 
+from time import sleep
+
 LIM = 32**4 + 10
 
-def _test_insert():
+def test_insert():
     h = hamtpy()
     # h[0] = 1
     for i in xrange(LIM):
@@ -30,7 +32,7 @@ def test_search():
         h[i] = i
 
     for i in xrange(LIM):
-        assert h[i] == i, `h[i], i`
+        assert h[i] == i
 
 def _test_search_dict():
     h = {}
@@ -38,7 +40,7 @@ def _test_search_dict():
         h[i] = i
 
     for i in xrange(LIM):
-        assert h[i] == i, `h[i], i`
+        assert h[i] == i
 
 def _test_insert_empty():
     gc.disable()

@@ -252,8 +252,51 @@ HAMT_search(HAMT *hamt, void *key,
     return HAMT_search_sub_trie(ep, BITS_PER_HASH_MINSIZE, hash, hash_func, eq_func, key);
 }
 
+static void
+HAMT_delete_sub_trie(HAMT_entry *sub_trie, void (*deletefunc)(void *data))
+{
+    int i;
+    HAMT_entry *ep = NULL;
+
+    for (i=0; i < popcount((uintptr_t)sub_trie->key); i++) {
+        ep = GET_SUB_TRIE_PTR(sub_trie) + i;
+        if (IS_KEY_VAL_SLOT(ep)) {
+            (*deletefunc)(ep->key);
+            (*deletefunc)(ep->value);
+            ep->key = ep->value = NULL;
+        }
+        else if (IS_SUB_TRIE_SLOT(ep)) {
+            HAMT_delete_sub_trie(ep, deletefunc);
+        }
+    }
+    free(GET_SUB_TRIE_PTR(sub_trie));
+    sub_trie->key = NULL;
+    sub_trie->value = NULL;
+}
+
     void 
 HAMT_delete(HAMT *hamt, void (*deletefunc)(void *data)) 
 {
-    return;
+    int i;
+    HAMT_entry *ep = NULL;
+
+    /* return; */
+
+#ifdef CHATTY
+    printf("HAMT_delete()");
+#endif
+
+    for (i=0; i < HASH_MINSIZE; i++) {
+        ep = hamt->root + i;
+        if (IS_KEY_VAL_SLOT(ep)) {
+            (*deletefunc)(ep->key);
+            (*deletefunc)(ep->value);
+            ep->key = ep->value = NULL;
+        }
+        else if (IS_SUB_TRIE_SLOT(ep)) {
+            HAMT_delete_sub_trie(ep, deletefunc);
+        }
+        else
+            assert(!ep->key && !ep->value);
+    }
 }

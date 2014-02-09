@@ -1,5 +1,6 @@
+==============================================================================
 Typed Containers
-----------------
+==============================================================================
 
 Python containers -- lists, tuples, sets, and, especially, dictionaries -- are
 awesome.  They rank with Python's syntax, object model, and standard library
@@ -23,36 +24,36 @@ value pairs (chars to ints, for example) that will be used in an internal
 loop, can we optimize it so that the entire dictionary, including the keys /
 values, fits in two cache lines?
 
-You bet.
+You betcha!
 
 Features and sketchy roadmap
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    * Typing of dictionary keys, values.  What NumPy does for typed arrays, we
-      do for the Python dictionary.
+* Typing of dictionary keys, values.  What NumPy does for typed arrays, we do
+  for the Python dictionary.
 
-    * User-tweakable parameters to control memory usage / sparsity, initial
-      dictionary size, and many more,
+* User-tweakable parameters to control memory usage / sparsity, initial
+  dictionary size, and many more,
 
-    * A clean C interface, with no Python dependency.  You can use the
-      underlying containers from your favorite systems language without having
-      to think about Python refcounting.
+* A clean C interface, with no Python dependency.  You can use the underlying
+  containers from your favorite systems language without having to think about
+  Python refcounting.
 
-    * Clean Python wrappers over the C foundation.  When you ask for something
-      from a container, a new Python object is created for you, like Ctypes,
-      or NumPy.
+* Clean Python wrappers over the C foundation.  When you ask for something
+  from a container, a new Python object is created for you, like Ctypes, or
+  NumPy.
 
-    * Optimized memory usage for the base fixed-size types.  Dictionaries of
-      uint32 -> float64 will use just 16 bytes per key / value pair on a
-      32-bit system.  For fixed-sized element types, key / values are stored
-      in the dictionary itself; they are *not* stored in the dictionary as
-      pointers.  This is to save pointer dereferencing, improve memory
-      locality, and to reduce memory usage.
+* Optimized memory usage for the base fixed-size types.  Dictionaries of
+  uint32 -> float64 will use just 16 bytes per key / value pair on a 32-bit
+  system.  For fixed-sized element types, key / values are stored in the
+  dictionary itself; they are *not* stored in the dictionary as pointers.
+  This is to save pointer dereferencing, improve memory locality, and to
+  reduce memory usage.
 
 Some possible avenues to explore:
 
-    * making a dictionary readonly, and the optimizations that a readonly dict
-      makes possible.
+* making a dictionary readonly, and the optimizations that a readonly dict
+  makes possible.
 
-    * Different collision behavoir to reduce cache misses (sparsity is a
-      factor here as well).
+* Different collision behavoir to reduce cache misses (sparsity is a factor
+  here as well).
